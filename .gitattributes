@@ -1,0 +1,2 @@
+# Built and run on Linux: keep LF so the Dockerfile CMD and Python stay clean.
+* text eol=lf

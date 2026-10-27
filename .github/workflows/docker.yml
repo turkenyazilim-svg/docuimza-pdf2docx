@@ -1,0 +1,52 @@
+# Builds the service image and publishes it on Docker Hub, where Cloud Run
+# pulls it from. Free for a public repository; nothing is stored or built on
+# Google Cloud, so the service adds no Artifact Registry or Cloud Build cost.
+#
+# Repository secrets (Settings → Secrets and variables → Actions):
+#   DOCKERHUB_USERNAME  Docker Hub user name
+#   DOCKERHUB_TOKEN     Docker Hub access token (Read & Write)
+name: docker
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  test-and-publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Unit tests
+        run: |
+          pip install -r requirements.txt
+          python -m unittest test_main
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Image tags
+        id: tags
+        run: |
+          image="${{ secrets.DOCKERHUB_USERNAME }}/docuimza-pdf2docx"
+          tags="$image:sha-${GITHUB_SHA::7}"
+          if [ "${GITHUB_REF}" = "refs/heads/main" ]; then tags="$tags,$image:latest"; fi
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then tags="$tags,$image:${GITHUB_REF#refs/tags/}"; fi
+          echo "tags=$tags" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
